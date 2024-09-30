@@ -1,28 +1,57 @@
 from dotenv import load_dotenv
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema.output_parser import StrOutputParser
+from langchain import hub
+from langchain.agents import (
+    AgentExecutor,
+    create_react_agent,
+)
+from langchain_core.tools import Tool
 from langchain_groq import ChatGroq
 
-# Load environment variables from .env
 load_dotenv()
 
-# Create a ChatOpenAI model
-model = ChatGroq(model="llama-3.1-70b-versatile")
 
-# Define prompt templates (no need for separate Runnable chains)
-prompt_template = ChatPromptTemplate.from_messages(
-    [
-        ("system", "You are a comedian who tells jokes about {topic}."),
-        ("human", "Tell me {joke_count} jokes."),
-    ]
+def get_current_time(*args, **kwargs):
+    """Returns the current time in H:MM AM/PM format."""
+    import datetime
+
+    now = datetime.datetime.now()
+    return now.strftime("%I:%M %p")
+
+
+# Using only time tool for this part.
+tools = [
+    Tool(
+        name="Time",
+        func=get_current_time,
+        description="Useful for when you need to know the current time",
+    ),
+]
+
+# A pre-made template.
+# https://smith.langchain.com/hub/hwchase17/react
+prompt = hub.pull("hwchase17/react")
+
+
+llm = ChatGroq(
+    model="llama-3.1-70b-versatile", temperature=0
 )
 
-# Create the combined chain using LangChain Expression Language (LCEL)
-chain = prompt_template | model | StrOutputParser()
-# chain = prompt_template | model
 
-# Run the chain
-result = chain.invoke({"topic": "lawyers", "joke_count": 3})
+agent = create_react_agent(
+    llm=llm,
+    tools=tools,
+    prompt=prompt,
+    stop_sequence=True,
+)
 
-# Output
-print(result)
+# Create an agent executor from the agent and tools
+agent_executor = AgentExecutor.from_agent_and_tools(
+    agent=agent,
+    tools=tools,
+    verbose=True,
+)
+
+# Run the agent with a test query
+response = agent_executor.invoke({"input": "What time is it?"})
+
+print("response:", response)
